@@ -413,25 +413,6 @@ function GestaoProjetoContent() {
                   )}
                 </div>
               </div>
-
-              {/* Informações rápidas complementares de contexto */}
-              <div className="flex items-center gap-2 flex-wrap pl-5.5 lg:pl-0">
-                {projeto?.modalidade && (
-                  <span className="px-3 py-1 rounded-xl text-xs font-semibold border bg-red-500/10 text-red-500 border-red-500/20">
-                    Modalidade: {projeto.modalidade}
-                  </span>
-                )}
-                {projeto?.local && (
-                  <span className="px-3 py-1 rounded-xl text-xs font-semibold border bg-blue-500/10 text-blue-500 border-blue-500/20">
-                    Núcleo: {projeto.local}
-                  </span>
-                )}
-                {projeto?.quantidade_turmas ? (
-                  <span className="px-3 py-1 rounded-xl text-xs font-semibold border bg-slate-800/80 text-slate-300 border-slate-700">
-                    {projeto.quantidade_turmas} turma(s)
-                  </span>
-                ) : null}
-              </div>
             </div>
           )}
         </div>
