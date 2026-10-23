@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Link2,
@@ -26,6 +26,9 @@ import {
   Layers,
   AlertCircle,
   Activity,
+  Copy,
+  Check,
+  X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -85,7 +88,7 @@ const CARDS_GESTAO: CardItem[] = [
   },
   {
     id: 'inscricoes-alunos',
-    titulo: 'Inscrições de Alunos',
+    titulo: 'Alunos Inscritos',
     descricao: 'Visualize, aprove ou edite cadastros de alunos inscritos no projeto.',
     icone: Users,
     badges: ['Admin', 'Gerente', 'Professores'],
@@ -141,6 +144,7 @@ const CARDS_GESTAO: CardItem[] = [
 
 function GestaoProjetoContent() {
   const params = useParams();
+  const router = useRouter();
   const idProjeto = params?.id as string | undefined;
 
   // Gerenciamento de Tema Claro/Escuro consistente com o Dashboard
@@ -225,7 +229,84 @@ function GestaoProjetoContent() {
     }
   };
 
+  // Estados do Modal 'Gerar Link de Inscrição'
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState<boolean>(false);
+  const [generatedLink, setGeneratedLink] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [linkCopied, setLinkCopied] = useState<boolean>(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  // Função para gerar o link de inscrição com expiração em 3 dias
+  const handleGenerateLink = async () => {
+    if (!idProjeto) {
+      setLinkError('ID do projeto não identificado.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setLinkError(null);
+
+    try {
+      // Data de expiração para daqui a 3 dias
+      const expiracao = new Date();
+      expiracao.setDate(expiracao.getDate() + 3);
+
+      const { data, error } = await supabase
+        .from('links_inscricao')
+        .insert({
+          projeto_id: idProjeto,
+          expira_em: expiracao.toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Erro ao gerar link no Supabase:', error.message);
+        setLinkError(`Erro ao gerar link: ${error.message}`);
+      } else if (data?.id) {
+        const link = `${window.location.origin}/inscricao/${data.id}`;
+        setGeneratedLink(link);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao conectar ao banco de dados.';
+      console.error('Erro inesperado ao gerar link:', msg);
+      setLinkError(msg);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!generatedLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch (err) {
+      console.error('Falha ao copiar:', err);
+    }
+  };
+
+  const handleCloseLinkModal = () => {
+    setIsLinkModalOpen(false);
+    setGeneratedLink('');
+    setLinkError(null);
+    setLinkCopied(false);
+  };
+
   const handleCardClick = (card: CardItem) => {
+    if (card.id === 'link-inscricao') {
+      setIsLinkModalOpen(true);
+      return;
+    }
+
+    if (card.id === 'inscricoes-alunos') {
+      if (idProjeto) {
+        router.push(`/projetos/${idProjeto}/inscricoes`);
+      }
+      return;
+    }
+
     setCardAtivoAviso(card.titulo);
     setTimeout(() => {
       setCardAtivoAviso(null);
@@ -571,6 +652,179 @@ function GestaoProjetoContent() {
           </Link>
         </div>
       </main>
+
+      {/* Modal: Gerar Link de Inscrição */}
+      {isLinkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div
+            className={`border rounded-2xl w-full max-w-lg p-6 sm:p-7 shadow-2xl relative flex flex-col transition-colors duration-200 ${
+              isDarkMode
+                ? 'bg-slate-900 border-slate-800 text-slate-100'
+                : 'bg-white border-slate-200 text-slate-900'
+            }`}
+          >
+            {/* Cabeçalho do Modal */}
+            <div
+              className={`flex items-start justify-between pb-4 border-b ${
+                isDarkMode ? 'border-slate-800' : 'border-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-600/30 shrink-0">
+                  <Link2 className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3
+                    className={`text-lg font-bold ${
+                      isDarkMode ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    Gerar Link de Inscrição
+                  </h3>
+                  <p
+                    className={`text-xs mt-0.5 ${
+                      isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                    }`}
+                  >
+                    Projeto: {projeto?.nome_projeto || projeto?.nome || 'Projeto'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseLinkModal}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isDarkMode
+                    ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo Explicativo */}
+            <div className="py-5 space-y-4">
+              <div
+                className={`p-3.5 rounded-xl border text-xs leading-relaxed flex items-start gap-2.5 ${
+                  isDarkMode
+                    ? 'bg-blue-500/10 border-blue-500/25 text-blue-300'
+                    : 'bg-blue-50 border-blue-200 text-blue-800'
+                }`}
+              >
+                <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <span>
+                  Este link gerado <strong>expira em 3 dias</strong> a partir do momento da criação e é de <strong>uso único</strong> para garantir a segurança no cadastro de participantes.
+                </span>
+              </div>
+
+              {linkError && (
+                <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-500 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{linkError}</span>
+                </div>
+              )}
+
+              {/* Se o link já foi gerado: exibe campo somente leitura + botão Copiar */}
+              {generatedLink ? (
+                <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                  <label
+                    className={`block text-xs font-semibold uppercase tracking-wider ${
+                      isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                    }`}
+                  >
+                    Link Gerado com Sucesso:
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={generatedLink}
+                      className={`flex-1 px-3.5 py-2.5 rounded-xl text-xs font-mono border focus:outline-none select-all ${
+                        isDarkMode
+                          ? 'bg-slate-800/90 border-slate-700 text-blue-300'
+                          : 'bg-slate-50 border-slate-300 text-blue-700'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      className={`flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-sm ${
+                        linkCopied
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-blue-600/25 active:scale-95'
+                      }`}
+                    >
+                      {linkCopied ? (
+                        <>
+                          <Check className="w-4 h-4 stroke-[2.5]" />
+                          <span>Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Copiar Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {linkCopied && (
+                    <p className="text-xs text-emerald-500 flex items-center gap-1 font-medium animate-in fade-in duration-150">
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      Link copiado para a área de transferência!
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Rodapé e Ações do Modal */}
+            <div
+              className={`pt-4 flex items-center justify-end gap-3 border-t ${
+                isDarkMode ? 'border-slate-800' : 'border-slate-200'
+              }`}
+            >
+              <button
+                type="button"
+                disabled={isGenerating}
+                onClick={handleCloseLinkModal}
+                className={`px-4 py-2.5 text-xs font-medium rounded-xl transition-colors cursor-pointer disabled:opacity-50 ${
+                  isDarkMode
+                    ? 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                Fechar
+              </button>
+
+              {/* Botão Gerar Link (oculto se generatedLink já estiver preenchido) */}
+              {!generatedLink && (
+                <button
+                  type="button"
+                  disabled={isGenerating}
+                  onClick={handleGenerateLink}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed active:scale-95"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Gerando Link...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="w-4 h-4" />
+                      <span>Gerar Link</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
